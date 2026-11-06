@@ -7,7 +7,7 @@ const PRECACHE_URLS = [
   "./index.html",
   "./style.css",
   "./db.js?v=314",
-  "./inline-html.js?v=348",,
+  "./inline-html.js?v=348",
   "./media-blob.js?v=314",
   "./ringtones.js?v=314",
   "./voice-ringtone-picker.js?v=314",

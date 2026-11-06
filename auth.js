@@ -691,8 +691,9 @@
   }
 
   function setLocked(locked) {
-    document.body.classList.toggle("is-locked", locked);
-    overlay.classList.toggle("show", locked);
+    // Standalone mode: never lock the desktop behind the login overlay
+    document.body.classList.remove("is-locked");
+    overlay?.classList.remove("show");
   }
 
   function normalizeActivationCodeInput(raw) {
@@ -820,116 +821,31 @@
     actMsg.classList.toggle("is-err", kind === "error");
   }
 
-  async function bootAuth() {
-    if (!SB_DEFAULT?.url || !SB_DEFAULT?.key) {
-      setLocked(true);
-      setMsg("缺少 Supabase 配置：请在 auth.js 中填写 SB_DEFAULT 的 url 与 key。", "error");
-      return;
-    }
-
-    if (window.__xxjOAuthBootstrapErr && !window.__xxjOAuthBootstrapOk) {
-      clearDiscordOAuthPending();
-      clearOAuthSnapshot();
-      setMode("login");
-      logoutBtn.hidden = true;
-      showLoginOverlay();
-      setMsg(formatOAuthErr(window.__xxjOAuthBootstrapErr), "error");
-      return;
-    }
-
-    const hadOAuthBootstrap = Boolean(window.__xxjOAuthBootstrapOk);
-    if (readStoredSessionPayload()) {
-      const sdkOk = await waitForSupabaseSdk(12000);
-      if (sdkOk) {
-        const restored = await restoreSupabaseSessionIfAny();
-        if (restored.session) {
-          clearDiscordOAuthPending();
-          clearOAuthSnapshot();
-          applyUnlockedFromStoredSession();
-          if (hadOAuthBootstrap) autoEnterAfterOAuth();
-          return;
-        }
-        if (restored.error && isHardAuthSessionError(restored.error)) {
-          clearSupabaseSessionKv();
-        } else if (readStoredSessionPayload()) {
-          clearDiscordOAuthPending();
-          clearOAuthSnapshot();
-          applyUnlockedFromStoredSession();
-          if (hadOAuthBootstrap) autoEnterAfterOAuth();
-          return;
-        }
-      } else if (readStoredSessionPayload()) {
-        clearDiscordOAuthPending();
-        clearOAuthSnapshot();
-        applyUnlockedFromStoredSession();
-        if (hadOAuthBootstrap) autoEnterAfterOAuth();
-        return;
+  function ensureStandaloneUnlockedKv() {
+    try {
+      window.XXJ_DB?.setKv?.(TOKEN_KEY, "standalone-local-token");
+      if (K?.FEATURE_ST_TAVERN_IMPORT) {
+        window.XXJ_DB?.setKv?.(K.FEATURE_ST_TAVERN_IMPORT, "1");
       }
-    }
+    } catch (_) {}
+  }
 
-    if (isOAuthReturnContext()) {
-      forceHideActivationScreen();
-      const ok = await handleOAuthReturn();
-      if (ok) return;
-    } else if (!(await waitForSupabaseSdk(8000))) {
-      setLocked(true);
-      setMsg("未加载 Supabase SDK，请检查网络后刷新页面。", "error");
-      return;
-    }
-
-    const stored = readStoredSessionPayload();
-    if (!stored) {
-      clearSupabaseSessionKv();
-      setMode("login");
-      logoutBtn.hidden = true;
-      showLoginOverlay();
-      return;
-    }
-
-    let session = null;
-    let lastError = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const result = await restoreSupabaseSessionIfAny();
-      session = result.session;
-      lastError = result.error;
-      if (session) break;
-      if (lastError && isHardAuthSessionError(lastError)) break;
-      if (attempt < 2) await delay(350 * (attempt + 1));
-    }
-
-    if (session) {
-      applyUnlockedFromStoredSession();
-      return;
-    }
-
-    if (lastError && isHardAuthSessionError(lastError)) {
-      clearSupabaseSessionKv();
-      clearActivationHash();
-      hideActivationScreen();
-      setMode("login");
-      logoutBtn.hidden = true;
-      setLocked(true);
-      setMsg("登录已过期，请重新登录。", "error");
-      return;
-    }
-
-    // 有本地会话但暂时连不上：先放行桌面，后台再试恢复
-    applyUnlockedFromStoredSession();
-    scheduleBackgroundSessionRestore();
+  async function bootAuth() {
+    ensureStandaloneUnlockedKv();
+    clearDiscordOAuthPending();
+    clearOAuthSnapshot();
+    clearActivationHash();
+    hideActivationScreen();
+    setLocked(false);
+    if (logoutBtn) logoutBtn.hidden = true;
+    window.dispatchEvent(new CustomEvent("rp-auth-changed"));
   }
 
   document.addEventListener("rp-open-auth-overlay", async () => {
+    ensureStandaloneUnlockedKv();
     clearActivationHash();
     hideActivationScreen();
-    setLocked(true);
-    setMsg("");
-    const { session } = await restoreSupabaseSessionIfAny();
-    if (session || readStoredSessionPayload()) {
-      logoutBtn.hidden = false;
-    } else {
-      setMode("login");
-      logoutBtn.hidden = true;
-    }
+    setLocked(false);
     window.dispatchEvent(new CustomEvent("rp-auth-changed"));
   });
 

@@ -33718,15 +33718,8 @@ async function verifyStExportUnlockBuffer(buffer) {
 let charStUnlockPendingFile = null;
 
 function readStTavernImportUnlocked() {
-  try {
-    const D = window.XXJ_DB;
-    if (!D?.getKv || !D.K) return false;
-    const key = D.K.FEATURE_ST_TAVERN_IMPORT;
-    if (!key) return false;
-    return D.getKv(key) === "1";
-  } catch {
-    return false;
-  }
+  // Standalone mode: SillyTavern (.png / .json) card import is unlocked by default
+  return true;
 }
 
 function syncCharStTavernImportLockUi() {
